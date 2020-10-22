@@ -1,0 +1,260 @@
+﻿@{
+    ViewData["Title"] = "Home Page";
+}
+
+<link href="~/lib/datatables/css/dataTables.bootstrap4.min.css" rel="stylesheet" />
+<link href="~/js/cron/jquery-cron.css" rel="stylesheet" />
+
+<div class="container">
+    <br />
+    <div style="width:90%; margin:0 auto;">
+
+        <button type="button" class="btn btn-primary" onclick="CreateItem();">
+            Create Item
+        </button>
+        <br />
+        <br />
+
+        <table id="listDatatable" class="table table-striped table-bordered dt-responsive nowrap" width="100%" cellspacing="0">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>URL</th>
+                    <th>Interval</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+        </table>
+    </div>
+</div>
+
+<div style="">
+    <div class="modal fade" id="itemModal" data-type="create" tabindex="-1" role="dialog" aria-labelledby="itemModalLabel"
+         aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="itemModalLabel">Modal title</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form>
+                        <div class="form-group">
+                            <label>Name</label>
+                            <input type="text" class="form-control" id="frmName" />
+                        </div>
+                        <div class="form-group">
+                            <label>Url</label>
+                            <input type="text" class="form-control" id="frmUrl" />
+                        </div>
+                        <div class="form-group">
+                            <label>Interval</label>
+                            <div id="frmInterval"></div>
+                        </div>
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="frmStatus">
+                            <label class="form-check-label">Status</label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="SaveItem();">Save changes</button>
+                    <input type="hidden" id="frmId" />
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts
+{
+    <script src="~/lib/datatables/js/jquery.dataTables.min.js"></script>
+    <script src="~/lib/datatables/js/dataTables.bootstrap4.min.js"></script>
+    <script src="~/js/cron/jquery-cron.js"></script>
+   
+
+    <script type="text/javascript">
+
+        var listDatatable = null;
+        var frmIntervalCron = null;
+
+        function ClearForm() {
+            $("#frmName").val("");
+            $("#frmUrl").val("");
+            frmIntervalCron.cron("value", "* * * * *");
+            $("#frmStatus").prop("checked", false);
+        }
+
+        function GetFormVal() {
+            var frm = {};
+            frm.Name = $("#frmName").val();
+            frm.Url = $("#frmUrl").val();
+            frm.Interval = frmIntervalCron.cron("value");
+            frm.Status = $("#frmStatus").prop("checked");
+            return frm;
+        }
+
+        function LoadFormData(id) {
+            ClearForm();
+
+            $.ajax({
+                type: 'GET',
+                url: '/home/GetItem/' + id + "?t=" + Date.now(),
+                dataType: 'json',
+
+            })
+                // using the done promise callback
+                .done(function (data) {
+
+                    // log data to the console so we can see
+                    console.log(data);
+
+                    $("#frmId").val(data.Id);
+                    $("#frmName").val(data.Name);
+                    $("#frmUrl").val(data.Url);
+                    frmIntervalCron.cron("value", data.Interval);
+                    $("#frmStatus").prop("checked", data.Status);
+
+                    $("#itemModalLabel").html("Update");
+                    $("#itemModal").attr("data-type", "update");
+
+                    $('#itemModal').modal('show');
+
+                    // here we will handle errors and validation messages
+                }).fail(function (data) {
+                    //Server failed to respond - Show an error message
+                    alert("Could not reach server, please try again later.");
+                });
+
+
+
+        }
+
+        function CreateItem() {
+            ClearForm();
+
+            $("#itemModalLabel").html("Create");
+            $("#itemModal").attr("data-type", "create");
+            $('#itemModal').modal('show');
+
+        }
+
+        function SaveItem() {
+            var _processType = $("#itemModal").attr("data-type");
+            var frm = GetFormVal();
+            if (_processType == "create") {
+                SaveFormData(frm, "/home/save");
+            } else if (_processType == "update") {
+                frm.Id = $("#frmId").val();
+                SaveFormData(frm, "/home/update");
+            }
+        }
+
+        function SaveFormData(_frm, _url) {
+
+            $.ajax({
+                type: 'POST',
+                url: _url,
+                data: _frm,
+                dataType: 'json'
+            })
+                // using the done promise callback
+                .done(function (data) {
+
+                    $('#itemModal').modal('hide');
+                    listDatatable.api().ajax.reload();
+                })
+
+                // using the fail promise callback
+                .fail(function (data) {
+
+                    alert("Could not reach server, please try again later.");
+                });
+
+        }
+
+        function DeleteItem(id) {
+            if (confirm("Are you sure to delete an item?")) {
+                $.ajax({
+                    type: 'GET',
+                    url: '/home/DeleteItem/' + id + "?t=" + Date.now(),
+                    dataType: 'json',
+
+                })
+                    // using the done promise callback
+                    .done(function (data) {
+                        listDatatable.api().ajax.reload();
+
+                    }).fail(function (data) {
+                        //Server failed to respond - Show an error message
+                        alert("Could not reach server, please try again later.");
+                    });
+            }
+        }
+
+
+        $(document).ready(function () {
+
+            $('#itemModal').modal({ show: false });
+            frmIntervalCron = $("#frmInterval").cron();
+
+            listDatatable = $('#listDatatable').dataTable({
+                "processing": true,
+                "serverSide": true,
+                "filter": true,
+                "ajax": {
+                    "url": "/home/list",
+                    "type": "POST",
+                    "datatype": "json"
+                },
+                "columnDefs": [{
+                    "targets": [0],
+                    "visible": false,
+                    "searchable": false
+                }, {
+                    "targets": [3, 4, 5],
+                    "orderable": false,
+                    "searchable": false
+                }],
+                "columns": [
+                    { "data": "Id", "name": "Id", "autoWidth": true },
+                    { "data": "Name", "name": "Name", "autoWidth": true },
+                    { "data": "Url", "name": "URL", "autoWidth": true },
+                    { "data": "IntervalFormatted", "name": "Interval", "autoWidth": true },
+                    {
+                        "render": function (data, type, row, meta) {
+
+                            let str = "";
+                            if (row.Status) {
+                                str += '<i style="color:green;" class="fa fa-check fa-2x " aria-hidden="true"></i>';
+                            } else {
+                                str += '<i style="color:red;" class="fa fa-times fa-2x" aria-hidden="true"></i>';
+                            }
+                            return str;
+                        }
+                    },
+                    {
+                        "render": function (data, type, row, meta) {
+                            let str = "<a href='#' class='btn btn-primary' onclick=LoadFormData('" + row.Id + "'); >Edit</a>";
+                            str += "&nbsp;";
+                            str += "<a href='#' class='btn btn-danger' onclick=DeleteItem('" + row.Id + "'); >Delete</a>"
+                            return str;
+                        }
+                    }
+                ]
+            });
+        });
+    </script>
+
+
+}
+
+
+
+
+
